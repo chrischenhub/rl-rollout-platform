@@ -1,0 +1,31 @@
+{
+  "pytest": ["test_hidden.py"],
+  "deliverables": [],
+  "criteria": [
+    {"id": "quoted_fields", "kind": "programmatic", "weight": 2,
+     "description": "RFC 4180 quoting: commas and escaped quotes inside memos",
+     "tests": ["test_quoted_memo_with_commas", "test_escaped_quotes_in_memo"]},
+    {"id": "exact_decimal", "kind": "programmatic", "weight": 2,
+     "description": "amounts are Decimal and sums are exact",
+     "tests": ["test_amounts_are_exact_decimals", "test_many_small_amounts_sum_exactly"]},
+    {"id": "account_normalization", "kind": "programmatic", "weight": 1,
+     "description": "account names are stripped and lower-cased",
+     "tests": ["test_accounts_are_normalized"]},
+    {"id": "currency_mismatch", "kind": "programmatic", "weight": 1,
+     "description": "an account with two currencies raises ValueError naming it",
+     "tests": ["test_mixed_currency_account_raises", "test_different_currencies_in_different_accounts_are_fine"]},
+    {"id": "monthly_keys", "kind": "programmatic", "weight": 1,
+     "description": "month keys are YYYY-MM in chronological order",
+     "tests": ["test_month_keys_are_zero_padded_and_chronological"]},
+    {"id": "monthly_amounts", "kind": "programmatic", "weight": 1,
+     "description": "in and out are both non-negative sums",
+     "tests": ["test_out_is_absolute_and_in_is_positive"]},
+    {"id": "existing_behavior", "kind": "programmatic", "weight": 1,
+     "description": "file order, blank lines and header validation still work",
+     "tests": ["test_existing_behavior_kept"]},
+    {"id": "changes_explain_root_causes", "kind": "judge", "weight": 1,
+     "description": "CHANGES.md explains each fix's root cause",
+     "files": ["CHANGES.md"], "context": ["bugs.md"],
+     "question": "Does CHANGES.md describe, for each bug it lists, what was wrong, the root cause in the code, and the fix? Pass only if every bug it claims to have fixed has all three and the descriptions are consistent with the reference list of real bugs (it need not list all six, but it must not describe a bug that isn't real)."}
+  ]
+}

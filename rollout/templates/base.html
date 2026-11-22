@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Rollouts{% endblock %}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%232f5bd3'/%3E%3C/svg%3E">
+<style>
+  /* --accent is for links and the primary button only; --info (running) is its own hue.
+     --field outlines inputs at 3:1 against the panel; --line is for dividers. */
+  :root {
+    --bg: #fbfbfa; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e4e3df; --field: #8f8e88;
+    --accent: #2f5bd3; --on-accent: #ffffff; --code: #f3f2ee;
+    --ok: #1f7a43; --ok-bg: #e3f3e8; --bad: #b3261e; --bad-bg: #fbe7e5;
+    --warn: #8a5a00; --warn-bg: #fdf1d8; --info: #0b6b74; --info-bg: #dff1f2; --idle: #55554f; --idle-bg: #eeede9;
+    --part: #5c6300; --part-bg: #f1f3d6; --infra: #6a3fa6; --infra-bg: #efe8f9; --grader: #9a2a6c; --grader-bg: #fae6f1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615; --panel: #1e1e1c; --text: #e9e8e4; --muted: #9a9993; --line: #33322f; --field: #6e6d68;
+      --accent: #8aa7ff; --on-accent: #161615; --code: #262624;
+      --ok: #7fd49e; --ok-bg: #1d3325; --bad: #ff9b92; --bad-bg: #3b1f1d;
+      --warn: #f2c46b; --warn-bg: #3a2e14; --info: #5fcfd9; --info-bg: #14302f; --idle: #b7b6b0; --idle-bg: #2b2a28;
+      --part: #d3dc7c; --part-bg: #2a2d14; --infra: #c9a9f5; --infra-bg: #2c2240; --grader: #f29cc9; --grader-bg: #3b1d2e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  /* Links inside sentences need more than color to stand out from the text around them. */
+  p a, .empty a { text-decoration: underline; text-underline-offset: 2px;
+                  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }
+  header { display: flex; align-items: center; gap: 20px; padding: 10px 24px; border-bottom: 1px solid var(--line);
+           background: var(--panel); flex-wrap: wrap; }
+  header .brand { font-weight: 650; color: var(--text); }
+  header nav { display: flex; gap: 6px 16px; flex: 1; flex-wrap: wrap; }
+  header nav a { white-space: nowrap; }
+  header nav a[aria-current] { color: var(--text); font-weight: 600; text-decoration: underline 2px var(--accent);
+                               text-underline-offset: 6px; }
+  header .who { color: var(--muted); display: flex; gap: 10px; align-items: center; }
+  @media (max-width: 600px) {
+    header { padding: 10px 16px; gap: 8px 16px; }
+    header .who { width: 100%; justify-content: space-between; }
+  }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; font-weight: 650; }
+  h2 { font-size: 16px; margin: 32px 0 10px; font-weight: 650; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+  .table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; }
+  /* On narrow screens tables scroll sideways inside their frame instead of squashing. */
+  .table-wrap table { min-width: 760px; }
+  td.nowrap, td code.id { white-space: nowrap; }
+  h1 code { font-size: .8em; }
+  .row.page-head { justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+  tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  /* Superseded rows read as secondary through color, not opacity, so their text keeps 4.5:1. */
+  tr.superseded td { color: var(--muted); }
+  tr.superseded .badge { color: var(--idle); background: var(--idle-bg); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  pre { background: var(--code); padding: 10px 12px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap;
+        word-break: break-word; margin: 6px 0; max-height: 480px; overflow-y: auto; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .s-completed, .s-passed { color: var(--ok); background: var(--ok-bg); }
+  .s-error, .s-failed { color: var(--bad); background: var(--bad-bg); }
+  .s-partial { color: var(--part); background: var(--part-bg); }
+  .s-infra_error { color: var(--infra); background: var(--infra-bg); }
+  .s-grader_error { color: var(--grader); background: var(--grader-bg); }
+  .s-timed_out, .s-cancelling { color: var(--warn); background: var(--warn-bg); }
+  .s-running { color: var(--info); background: var(--info-bg); }
+  .s-queued, .s-cancelled, .s-finished { color: var(--idle); background: var(--idle-bg); }
+  .muted { color: var(--muted); }
+  /* Job summary: the two result metrics, then how far the job got, in one panel. */
+  .summary { display: flex; flex-wrap: wrap; gap: 16px 48px; align-items: center; padding: 16px 20px; }
+  .summary .k { color: var(--muted); font-size: 12px; }
+  .summary .k b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .summary .metric .v { font-size: 24px; font-weight: 650; line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .summary .tally { flex: 1; min-width: 320px; }
+  .summary .progress { margin: 6px 0 8px; }
+  dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; }
+  dl.kv dt { color: var(--muted); }
+  dl.kv dd { margin: 0; word-break: break-word; }
+  button, .button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--line);
+           background: var(--panel); color: var(--text); cursor: pointer; }
+  button:enabled:hover, .button:hover { background: var(--code); text-decoration: none; }
+  button:enabled:active, .button:active { background: var(--line); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.primary:enabled:hover { background: var(--accent); filter: brightness(1.08); }
+  button.primary:enabled:active { background: var(--accent); filter: brightness(.92); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.danger { color: var(--bad); }
+  button.small { padding: 2px 10px; font-size: 12px; }
+  .badge.flag { color: var(--warn); background: var(--warn-bg); }
+  .flags { margin: -12px 0 16px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  form.inline { display: inline; }
+  select, input[type=number], input[type=text] { font: inherit; padding: 6px 8px; border-radius: 6px;
+           border: 1px solid var(--field); background: var(--panel); color: var(--text); }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+  .error { color: var(--bad); background: var(--bad-bg); padding: 10px 12px; border-radius: 6px; margin: 0 0 16px; }
+  .notice { background: var(--ok-bg); padding: 12px; border-radius: 6px; margin: 0 0 16px; }
+  .step { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; margin: 14px 0; }
+  .step.user { border-color: var(--idle); }
+  .step.agent { border-color: var(--line); }
+  .step .meta { color: var(--muted); font-size: 12px; }
+  .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--info); margin-right: 6px;
+              animation: pulse 1.5s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+  h1 + .table-wrap { margin-top: 20px; }
+  /* Job progress: one segment per finished status, in the legend's order; queued is the empty track. */
+  .progress { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--idle-bg); margin: 20px 0 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 20px; color: var(--muted); }
+  .legend b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+  .p-passed { background: var(--ok); } .p-partial { background: var(--part); } .p-failed { background: var(--bad); }
+  .p-timed_out { background: var(--warn); } .p-infra_error { background: var(--infra); }
+  .p-grader_error { background: var(--grader); }
+  .p-cancelled { background: var(--idle); } .p-running { background: var(--info); }
+  .p-queued { background: var(--idle-bg); box-shadow: inset 0 0 0 1px var(--field); }
+  .job-bar { position: sticky; top: 0; z-index: 1; margin-bottom: 16px; }
+  .job-bar .go { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  dialog { border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; width: min(420px, 90vw);
+           background: var(--panel); color: var(--text); box-shadow: 0 12px 40px rgb(0 0 0 / .2); }
+  dialog::backdrop { background: rgb(0 0 0 / .35); }
+  dialog h3 { margin: 0 0 6px; font-size: 15px; font-weight: 650; }
+  dialog p { margin: 0; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+  .summary-note { color: var(--muted); margin: 10px 0 0; }
+  /* Row actions that aren't the usual next step appear on hover or keyboard focus. */
+  td.act { width: 1%; white-space: nowrap; }
+  @media (hover: hover) {
+    td.act:not(.keep) form { opacity: 0; }
+    tr:hover td.act form, td.act form:focus-within { opacity: 1; }
+  }
+  details.replaced { margin-top: 10px; }
+  details.replaced > summary, details.more > summary { cursor: pointer; padding: 4px 0; }
+  details.replaced[open] > summary { margin-bottom: 8px; }
+  details.why summary { cursor: pointer; }
+  details.why pre { max-height: none; }
+  .why .src { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .job-bar .qa-hint { flex-basis: 100%; margin: 0; }
+  .badge.kind { color: var(--idle); background: var(--idle-bg); }
+  /* Task QA: a flagged task's reasons sit in a row under its numbers. */
+  table.qa td.num { white-space: nowrap; }
+  tr.has-flags td { border-bottom: 0; }
+  tr.flag-detail td { padding-top: 0; }
+  .qa-flag { border-left: 3px solid var(--warn); padding: 2px 0 2px 12px; margin: 2px 0 10px; }
+  .qa-flag.reviewed { border-color: var(--line); }
+  .qa-flag .review { color: var(--muted); cursor: pointer; margin-top: 2px; }
+  .qa-flag form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+  .qa-flag input[type=text] { width: min(420px, 100%); padding: 3px 8px; }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="/">Rollouts</a>
+  {% if user %}
+  {% set path = request.url.path %}
+  <nav>
+    <a href="/" {% if path == "/" or path.startswith("/environments") %}aria-current="page"{% endif %}>Environments</a>
+    <a href="/jobs" {% if path.startswith("/jobs") or path.startswith("/runs") %}aria-current="page"{% endif %}>Jobs</a>
+    <a href="/account" {% if path.startswith("/account") %}aria-current="page"{% endif %}>API tokens</a>
+    <a href="/docs">API docs</a>
+  </nav>
+  <div class="who">{{ user }}
+    <form class="inline" method="post" action="/logout"><button>Sign out</button></form>
+  </div>
+  {% endif %}
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<dialog id="confirm" aria-labelledby="confirm-title">
+  <form method="dialog">
+    <h3 id="confirm-title"></h3>
+    <p class="muted" id="confirm-detail"></p>
+    <div class="actions">
+      <button value="" id="confirm-keep" autofocus>Cancel</button>
+      <button value="go" id="confirm-go" class="danger"></button>
+    </div>
+  </form>
+</dialog>
+<script>
+  // Forms with data-confirm ask first, in a dialog whose buttons name the outcome
+  // (data-keep / data-go) instead of the browser's ambiguous OK / Cancel.
+  document.addEventListener("submit", (e) => {
+    const form = e.target, dialog = document.getElementById("confirm");
+    if (!form.dataset.confirm || !dialog.showModal) return;
+    e.preventDefault();
+    dialog.querySelector("#confirm-title").textContent = form.dataset.confirm;
+    dialog.querySelector("#confirm-detail").textContent = form.dataset.detail || "";
+    dialog.querySelector("#confirm-keep").textContent = form.dataset.keep || "Cancel";
+    dialog.querySelector("#confirm-go").textContent = form.dataset.go;
+    dialog.returnValue = "";
+    dialog.onclose = () => { if (dialog.returnValue === "go") form.submit(); };
+    dialog.showModal();
+  });
+
+  // Pages mark their changing region with id="live" data-poll="1" while work is active;
+  // re-fetch the page and swap that region until it stops asking. Swaps happen only when the
+  // server's HTML changed, wait while text in the region is selected or a dialog is open,
+  // or while someone types in it, and carry keyboard focus and opened <details data-key> over to the new region.
+  const focusKey = (el) => [el.tagName, el.getAttribute("href"), el.closest("form")?.getAttribute("action"),
+                            el.textContent.trim()].join("|");
+  // A log tail's last lines are the ones that explain the failure: start scrolled there.
+  const toEnd = (root) => root.querySelectorAll("pre.tail").forEach((p) => { p.scrollTop = p.scrollHeight; });
+  toEnd(document);
+  let served = document.getElementById("live")?.outerHTML;
+  (function poll() {
+    const live = document.getElementById("live");
+    if (!live || !live.dataset.poll) return;
+    setTimeout(async () => {
+      try {
+        const res = await fetch(location.href, { headers: { "Accept": "text/html" } });
+        const fresh = res.ok && new DOMParser().parseFromString(await res.text(), "text/html").getElementById("live");
+        const sel = document.getSelection();
+        const typing = live.contains(document.activeElement) && document.activeElement.matches("input[type=text], textarea");
+        const busy = (sel && !sel.isCollapsed && live.contains(sel.anchorNode)) || document.querySelector("dialog[open]") || typing;
+        if (fresh && fresh.outerHTML !== served && !busy) {
+          served = fresh.outerHTML;
+          const key = live.contains(document.activeElement) ? focusKey(document.activeElement) : null;
+          const open = new Set([...live.querySelectorAll("details[open][data-key]")].map((d) => d.dataset.key));
+          fresh.querySelectorAll("details[data-key]").forEach((d) => { if (open.has(d.dataset.key)) d.open = true; });
+          live.replaceWith(fresh);
+          toEnd(fresh);
+          if (key) [...fresh.querySelectorAll("a, button, summary, input, select")]
+            .find((el) => focusKey(el) === key)?.focus({ preventScroll: true });
+        }
+      } catch (e) {}
+      poll();
+    }, 3000);
+  })();
+</script>
+</body>
+</html>

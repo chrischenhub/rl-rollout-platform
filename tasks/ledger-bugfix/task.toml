@@ -1,0 +1,25 @@
+schema_version = "1.4"
+
+[task]
+name = "pyswe/ledger-bugfix"
+version = "1.0.0"
+description = "Fix six spec violations in a small CSV ledger library"
+keywords = ["python", "bugfix", "csv", "decimal"]
+
+[metadata]
+difficulty = "easy"
+
+[environment]
+cpus = 1
+memory_mb = 2048
+storage_mb = 4096
+build_timeout_sec = 600.0
+network_mode = "public"
+
+[agent]
+timeout_sec = 900
+
+[verifier]
+timeout_sec = 300
+network_mode = "public"
+env = { ANTHROPIC_API_KEY = "${ANTHROPIC_API_KEY:-}", JUDGE_MODEL = "${JUDGE_MODEL:-claude-sonnet-5-5}" }

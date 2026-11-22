@@ -1,0 +1,23 @@
+# Production: docker compose -f compose.yaml -f compose.prod.yaml --profile app up -d --build
+services:
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      # The public hostname. Caddy gets a Let's Encrypt certificate for it. Without a
+      # domain, <ip-with-dashes>.sslip.io resolves to the server and works for OAuth too.
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS to the public hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+    profiles: [app]
+
+volumes:
+  caddy_data:
+  caddy_config:

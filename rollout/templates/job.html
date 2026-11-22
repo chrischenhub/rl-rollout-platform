@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}Job {{ job.id | short }} · Rollouts{% endblock %}
+
+{% macro attempt_cell(r) -%}
+<td class="num nowrap">{{ r.attempt }}{% if r.retry_number %} <span class="muted">retry {{ r.retry_number }}{{ " · manual" if r.retry_kind == "manual" }}</span>{% endif %}</td>
+{%- endmacro %}
+
+{% macro pct(x) %}{{ "%.0f%%" % (x * 100) if x is not none else "—" }}{% endmacro %}
+
+{% macro task_cell(r) -%}
+<td><a href="/runs/{{ r.id }}"><code class="id">{{ r.task_id }}</code></a>{% if qa and r.agent == "oracle" %} <span class="muted">oracle</span>{% endif %}</td>
+{%- endmacro %}
+
+{% macro review_form(t, f) -%}
+<form method="post" action="/jobs/{{ job.id }}/flag-reviews">
+  <input type="hidden" name="task_id" value="{{ t.task_id }}">
+  <input type="hidden" name="code" value="{{ f.code }}">
+  {# Enter in the note submits with the form's first button; this one is disabled, so
+     Enter does nothing and only clicking a verdict saves. #}
+  <button type="submit" disabled hidden></button>
+  <input type="text" name="note" value="{{ f.review.note if f.review else '' }}" maxlength="2000" placeholder="Note (optional)"
+         aria-label="Note on the {{ f.label }} flag for {{ t.task_id }}">
+  <button class="small" name="verdict" value="valid">Valid</button>
+  <button class="small" name="verdict" value="false_positive">False positive</button>
+</form>
+{%- endmacro %}
+
+{% macro why(r) -%}
+{% if r.error_message %}
+<details class="why" data-key="{{ r.id }}">
+  <summary>{% if r.error_kind %}<code>{{ r.error_kind }}</code> {% endif %}<span class="muted">{{ r.error_message[:140] }}{{ "…" if r.error_message | length > 140 }}</span></summary>
+  {% if r.error_message | length > 140 %}<pre>{{ r.error_message }}</pre>{% endif %}
+  {% if r.log_tail %}<div class="src">Last lines of <code>{{ r.log_source or "harbor.log" }}</code> · <a href="/runs/{{ r.id }}">more on the run page</a></div>
+  <pre class="tail">{{ r.log_tail.rstrip().splitlines()[-8:] | join("\n") }}</pre>{% endif %}
+</details>
+{% elif r.grade and r.outcome in ("failed", "partial") %}
+<span class="muted">
+  {% if r.grade.error %}grader: {{ r.grade.error }}{% elif r.grade.missing %}missing {{ r.grade.missing | join(", ") }}{% elif r.grade.failed %}failed {{ r.grade.failed | join(", ") }}{% endif %}
+</span>
+{% endif %}
+{% if r.waiting_for_cleanup %}<span class="muted">waiting for the previous try's sandbox to be deleted</span>{% endif %}
+{%- endmacro %}
+
+{% block content %}
+<div id="live" {% if live %}data-poll="1"{% endif %}>
+<div class="row page-head">
+  <div>
+    <h1>Job <code>{{ job.id | short }}</code> <span class="badge s-{{ job.status }}">{% if live %}<span class="live-dot"></span>{% endif %}{{ job.status }}</span></h1>
+    <p class="sub">
+      <a href="/environments/{{ job.environment_id }}">{{ job.environment_id }}</a>
+      {% if qa %}· Task QA · {{ job.model }} × {{ job.attempts }} and the oracle once per task
+      {% else %}· {{ job.agent }}{% if job.model %} · {{ job.model }}{% endif %}
+      · {{ job.attempts }} attempt{{ "s" if job.attempts > 1 }} per task{% endif %}
+      · LLM judge {{ "on" if job.judge else "off" }}
+      · started by {{ job.created_by }}, {{ job.created_at | when }}
+    </p>
+    {% if config.option_labels %}<p class="flags">
+      {% for label in config.option_labels %}<span class="badge flag">{{ label }}</span> {% endfor %}
+      <span class="muted">Job overrides: its results aren't comparable with ordinary runs.</span></p>{% endif %}
+    {% if job.cancel_requested_at %}<p class="flags muted">Cancel requested {{ job.cancel_requested_at | when }}
+      {%- if job.cancelled_by %} by {{ job.cancelled_by }}{% endif %}. Queued runs don't start; running ones are
+      stopped and keep what they produced.</p>{% endif %}
+  </div>
+  {% if job.status not in ("finished", "cancelled") %}
+  <form method="post" action="/jobs/{{ job.id }}/cancel" data-confirm="Cancel this job?"
+        data-detail="Queued runs won't start, and running sandboxes will be destroyed."
+        data-keep="Keep running" data-go="Cancel job">
+    <button class="danger">Cancel job</button>
+  </form>
+  {% endif %}
+</div>
+
+{% set total = job.total_runs %}
+{% set oc = job.outcomes %}
+{% set done = total - job.counts.get("queued", 0) - job.counts.get("running", 0) %}
+{% set left_out = ("infra_error", "grader_error", "cancelled") | select("in", oc) | list %}
+<div class="panel summary">
+  <div class="metric"><div class="k">Pass rate <span class="muted">(reward = 1)</span></div>
+    <div class="v">{{ "%.0f%%" % (job.pass_rate * 100) if job.pass_rate is not none else "—" }}</div>
+    <div class="k">{{ job.passed_runs }} of {{ job.graded_runs }} graded</div></div>
+  <div class="metric"><div class="k">Mean reward</div><div class="v">{{ job.mean_reward | reward }}</div>
+    <div class="k">over the same {{ job.graded_runs }}</div></div>
+  <div class="tally">
+    <div class="k"><b>{{ done }}</b> of {{ total }} runs done</div>
+    <div class="progress" role="progressbar" aria-label="Runs done" aria-valuemin="0" aria-valuemax="{{ total }}" aria-valuenow="{{ done }}">
+      {% for o in OUTCOMES[:-1] if total and oc.get(o) %}<span class="p-{{ o }}" style="width: {{ 100 * oc[o] / total }}%"></span>{% endfor %}
+    </div>
+    {# Outcomes that happened; while the job is live, running and queued stay put so the legend doesn't jump. #}
+    <div class="legend">
+      {% for o in OUTCOMES if oc.get(o) or (live and o in ("running", "queued")) %}<span><span class="sw p-{{ o }}"></span><b>{{ oc.get(o, 0) }}</b> {{ OUTCOME_LABELS[o] }}</span>{% endfor %}
+    </div>
+  </div>
+</div>
+<p class="summary-note">
+  Pass rate and mean reward count graded {{ "model " if qa }}runs: completed, and timed out (scored as whatever the
+  grader gave them, 0 if it didn't run).{% if qa %} The oracle's runs are in the task report.{% endif %}
+  {% if left_out %}Not counted, because they say nothing about the model:
+    {% for o in left_out %}{{ oc[o] }} {{ OUTCOME_LABELS[o] }}{{ "s" if oc[o] > 1 and o != "cancelled" }}{{ ", " if not loop.last }}{% endfor %}.{% endif %}
+  {% if job.error_kinds %}Errors by kind: {% for k, n in job.error_kinds.items() %}<code>{{ k }}</code> {{ n }}{{ " · " if not loop.last }}{% endfor %}.{% endif %}
+</p>
+
+{% if qa %}
+<h2 id="qa">Task report</h2>
+<p class="muted">Each task ran {{ job.attempts }} times with {{ job.model }} and once with the oracle, its reference
+  solution. Pass rate and timeouts count graded model runs; agent time is the agent's own working time on runs that
+  finished, without sandbox setup or grading. A task's flags appear once all its runs have finished.
+  {% if qa.flags %}<b>{{ qa.flagged_tasks }} of {{ qa.tasks | length }} task{{ "s" if qa.tasks | length > 1 }}
+  flagged</b>, {{ qa.reviewed_flags }} of {{ qa.flags }} flag{{ "s" if qa.flags > 1 }} reviewed.{% endif %}</p>
+{% if review_error %}<p class="error">{{ review_error }}</p>{% endif %}
+<div class="table-wrap">
+<table class="qa">
+  <tr><th>Task</th><th>Oracle</th><th class="num">Pass rate</th><th class="num">Mean reward</th>
+      <th class="num">Agent time</th><th class="num">Timeouts</th><th>Flags</th></tr>
+  {% for t in qa.tasks %}
+  <tr{% if t.flags %} class="has-flags"{% endif %}>
+    <td><code class="id">{{ t.task_id }}</code>
+      {% if not t.done %}<div class="muted">{{ t.finished_runs }} of {{ t.total_runs }} runs finished</div>{% endif %}</td>
+    <td>{% if t.oracle %}{% set o = t.oracle %}
+      {# Styled as a verdict on the grader: any score below 1 is a failure, an infrastructure error says nothing. #}
+      <a href="/runs/{{ o.run_id }}"><span class="badge s-{{ 'infra_error' if o.state == 'inconclusive' else o.state }}">{{ o.state | replace("_", " ") }}</span></a>
+      {% if o.reward is not none %}<span class="muted">{{ o.reward | reward }}</span>{% endif %}
+      {% if o.state == "inconclusive" %}<div class="muted">infrastructure failed: retry it from its run page</div>{% endif %}
+    {% else %}—{% endif %}</td>
+    <td class="num">{{ pct(t.pass_rate) }}<div class="muted">{{ t.passed_runs }} of {{ t.graded_runs }} graded</div>
+      {% if t.not_counted %}<div class="muted">{{ t.not_counted.values() | sum }} not counted</div>{% endif %}</td>
+    <td class="num">{{ t.mean_reward | reward }}
+      {% if t.reward_range and t.reward_range[0] != t.reward_range[1] %}<div class="muted">{{ t.reward_range[0] | reward }}–{{ t.reward_range[1] | reward }}</div>{% endif %}</td>
+    <td class="num">{% if t.agent_time %}{{ t.agent_time.mean | duration }}
+      {% if t.agent_time.runs > 1 %}<div class="muted">{{ t.agent_time.min | duration }}–{{ t.agent_time.max | duration }}</div>{% endif %}
+      {% else %}—{% endif %}</td>
+    <td class="num">{{ pct(t.timeout_rate) }}
+      {% if t.timeout_rate is not none %}<div class="muted">{{ t.timed_out_runs }} of {{ t.graded_runs }}
+        · limit {{ t.agent_timeout_sec | duration }}</div>{% endif %}</td>
+    <td>{% if not t.done %}<span class="muted">pending</span>
+      {% elif t.flags %}{% for f in t.flags %}<span class="badge flag">{{ f.label }}</span> {% endfor %}
+        {% if t.note %}<div class="muted">{{ t.note }}</div>{% endif %}
+      {% else %}<span class="muted">none{{ "; " ~ t.note if t.note }}</span>{% endif %}</td>
+  </tr>
+  {% if t.flags %}
+  <tr class="flag-detail"><td colspan="7">
+    {% for f in t.flags %}{% set v = f.review %}
+    <div class="qa-flag{{ ' reviewed' if v }}">
+      <div><b>{{ f.label }}:</b> {{ f.reason }}</div>
+      {% if v %}
+      <details data-key="review-{{ t.task_id }}-{{ f.code }}">
+        <summary class="review">Marked <b>{{ "valid" if v.verdict == "valid" else "false positive" }}</b> by
+          {{ v.reviewed_by }}, {{ v.reviewed_at | when }}{% if v.note %}: “{{ v.note }}”{% endif %} · change</summary>
+        {{ review_form(t, f) }}
+      </details>
+      {% else %}{{ review_form(t, f) }}{% endif %}
+    </div>
+    {% endfor %}
+  </td></tr>
+  {% endif %}
+  {% endfor %}
+</table>
+</div>
+{% endif %}
+
+{% set current = runs | selectattr("effective") | list %}
+{% set replaced = runs | rejectattr("effective") | list %}
+<h2>Runs</h2>
+<div class="table-wrap">
+<table>
+  <tr><th>Task</th><th class="num">Attempt</th><th>Outcome</th><th class="num">Reward</th><th class="num">Duration</th><th>Why</th><th><span class="sr-only">Actions</span></th></tr>
+  {% for r in current %}
+  <tr>
+    {{ task_cell(r) }}
+    {{ attempt_cell(r) }}
+    <td><span class="badge s-{{ r.outcome }}" title="status: {{ r.status }}">{% if r.outcome == "running" %}<span class="live-dot"></span>{% endif %}{{ OUTCOME_LABELS[r.outcome] }}</span></td>
+    <td class="num">{{ r.reward | reward }}</td>
+    <td class="num">{{ r.duration_sec | duration if r.started_at else "—" }}</td>
+    <td>{{ why(r) }}</td>
+    {# Retry stays visible where it's the usual next step (results that say nothing about the model); elsewhere it shows on hover. #}
+    <td class="act{{ ' keep' if r.outcome in ('infra_error', 'grader_error', 'cancelled') }}">{% if r.status not in ("queued", "running") %}
+      <form method="post" action="/runs/{{ r.id }}/retry" data-confirm="Run this task attempt again?"
+            data-detail="A new try is queued and linked to this one. It starts once this run's sandbox is deleted{{ ', and spends model credits' if r.model else '' }}."
+            data-keep="Don't retry" data-go="Retry">
+        <button class="small" aria-label="Retry {{ r.task_id }} attempt {{ r.attempt }}">Retry</button>
+      </form>
+    {% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% if replaced %}
+<details class="replaced" data-key="replaced">
+  <summary>{{ replaced | length }} earlier {{ "try was" if replaced | length == 1 else "tries were" }} replaced by a retry
+    <span class="muted">· kept for the record; counts use the latest try of each task attempt</span></summary>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Task</th><th class="num">Attempt</th><th>Outcome</th><th class="num">Duration</th><th>Why</th></tr>
+    {% for r in replaced %}
+    <tr class="superseded">
+      {{ task_cell(r) }}
+      {{ attempt_cell(r) }}
+      <td><span class="badge s-{{ r.outcome }}" title="status: {{ r.status }}">{{ OUTCOME_LABELS[r.outcome] }}</span></td>
+      <td class="num">{{ r.duration_sec | duration if r.started_at else "—" }}</td>
+      <td>{{ why(r) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+</details>
+{% endif %}
+
+<h2 id="configuration">Task settings</h2>
+<p class="muted">The version each task was pinned to and its <code>task.toml</code> limits, with this job's overrides in
+  <b>bold</b>, and the exact Harbor command its latest try ran.</p>
+<div class="table-wrap">
+<table>
+  <tr><th>Task</th><th>Version</th><th class="num">CPUs</th><th class="num">Memory</th><th class="num">Agent timeout</th>
+      <th class="num">Grader timeout</th><th>Harbor command</th></tr>
+  {% for t in config.tasks %}{% set s = t.task_toml %}{% set o = t.overrides %}
+  <tr>
+    <td><code class="id">{{ t.task_id }}</code></td>
+    <td><code>{{ t.digest[:12] }}</code></td>
+    <td class="num nowrap">{{ s.cpus }}{% if o.cpus %} → <b>{{ o.cpus }}</b>{% endif %}</td>
+    <td class="num nowrap">{{ s.memory_mb }} MB{% if o.memory_mb %} → <b>{{ o.memory_mb }} MB</b>{% endif %}</td>
+    <td class="num nowrap">{{ "%g" % s.agent_timeout_sec }} s{% if o.agent_timeout_multiplier %} × {{ o.agent_timeout_multiplier }}
+      = <b>{{ "%g" % (s.agent_timeout_sec * (o.agent_timeout_multiplier | float)) }} s</b>{% endif %}</td>
+    <td class="num nowrap">{{ "%g" % s.verifier_timeout_sec }} s</td>
+    <td>
+      {% if t.harbor_command %}<details data-key="cmd-{{ t.task_id }}"><summary>show</summary><pre>{{ t.harbor_command_text }}</pre></details>
+      {% elif t.synced_run_id %}<span class="muted">not recorded ·</span> <a href="/api/runs/{{ t.synced_run_id }}/files/trial/config.json">Harbor's trial config</a>
+      {% else %}<span class="muted">not recorded</span>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+
+<h2>Run it again</h2>
+<p class="muted">Runs the tasks' current versions, which may differ from the ones pinned above. The command runs in the
+  worker container on the server.</p>
+<pre>{{ config.reproduce.cli }}</pre>
+<details class="more" data-key="rerun-api"><summary>The same job through the API</summary>
+<pre>POST /api/jobs
+{{ config.reproduce.api | tojson(indent=2) }}</pre>
+</details>
+</div>
+{% endblock %}

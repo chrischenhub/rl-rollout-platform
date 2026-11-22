@@ -1,0 +1,15 @@
+# Credentials: never commit
+.env
+.env.*
+!.env.example
+secrets.env
+client_secret_*.json
+
+# Runtime data and caches
+data/
+jobs/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.DS_Store

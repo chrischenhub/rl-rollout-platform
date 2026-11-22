@@ -1,0 +1,31 @@
+{
+  "total_requests": 569,
+  "malformed_lines": 0,
+  "status_classes": {
+    "2xx": 320,
+    "3xx": 119,
+    "4xx": 99,
+    "5xx": 31
+  },
+  "p95_latency_ms": {
+    "/api/alpha": 99,
+    "/api/feed": 233,
+    "/api/pay": 179,
+    "/api/zeta": 62
+  },
+  "top_5xx_paths": [
+    {
+      "path": "/api/feed",
+      "count": 19
+    },
+    {
+      "path": "/api/pay",
+      "count": 5
+    },
+    {
+      "path": "/api/zeta",
+      "count": 5
+    }
+  ],
+  "incident": null
+}

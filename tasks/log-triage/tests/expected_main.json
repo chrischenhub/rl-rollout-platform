@@ -1,0 +1,36 @@
+{
+  "total_requests": 2584,
+  "malformed_lines": 18,
+  "status_classes": {
+    "2xx": 2144,
+    "3xx": 71,
+    "4xx": 139,
+    "5xx": 230
+  },
+  "p95_latency_ms": {
+    "/api/cart": 123,
+    "/api/checkout": 5492,
+    "/api/orders": 162,
+    "/api/search": 257,
+    "/api/users/me": 83,
+    "/healthz": 6
+  },
+  "top_5xx_paths": [
+    {
+      "path": "/api/checkout",
+      "count": 203
+    },
+    {
+      "path": "/api/orders",
+      "count": 8
+    },
+    {
+      "path": "/api/search",
+      "count": 7
+    }
+  ],
+  "incident": {
+    "start": "2026-11-03T14:21:00Z",
+    "end": "2026-11-03T14:34:00Z"
+  }
+}

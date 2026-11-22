@@ -1,0 +1,18 @@
+<div class="table-wrap">
+<table>
+  <tr><th>Job</th><th>Agent</th><th>Model</th><th class="num">Runs</th><th class="num">Active</th><th>Created by</th><th>Created</th></tr>
+  {% for j in jobs %}
+  <tr>
+    <td><a href="/jobs/{{ j.id }}"><code>{{ j.id | short }}</code></a>{% if j.kind == "qa" %} <span class="badge kind">task QA</span>{% endif %}{% if j.cancel_requested_at %} <span class="badge s-cancelled">cancelled</span>{% endif %}</td>
+    <td>{{ j.agent }}</td>
+    <td>{{ j.model or "—" }}</td>
+    <td class="num">{{ j.total_runs }}</td>
+    <td class="num">{% if j.active_runs %}<span class="live-dot"></span>{% endif %}{{ j.active_runs }}</td>
+    <td class="muted">{{ j.created_by }}</td>
+    <td class="muted">{{ j.created_at | when }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7" class="muted empty">No jobs yet. <a href="/">Pick an environment</a> to start one.</td></tr>
+  {% endfor %}
+</table>
+</div>

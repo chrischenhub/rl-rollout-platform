@@ -1,0 +1,54 @@
+# Local:  docker compose up -d postgres         (run api/worker on the host with uv)
+#         docker compose --profile app up -d     (everything in containers, as on the droplet)
+name: rl-rollout
+
+x-app: &app
+  build: .
+  env_file:
+    - path: .env
+      required: false
+    - path: secrets.env
+      required: false
+  environment:
+    DATABASE_URL: postgresql://rollout:rollout@postgres:5432/rollout
+    DATA_DIR: /data
+  volumes:
+    - data:/data
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+  profiles: [app]
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rollout
+      POSTGRES_PASSWORD: rollout
+      POSTGRES_DB: rollout
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rollout"]
+      interval: 2s
+      retries: 30
+    restart: unless-stopped
+
+  api:
+    <<: *app
+    command: ["rollout", "api", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  worker:
+    <<: *app
+    command: ["rollout", "worker"]
+    # Long enough for Harbor to cancel its trial and for us to sync and clean up.
+    stop_grace_period: 120s
+
+volumes:
+  pgdata:
+  data:

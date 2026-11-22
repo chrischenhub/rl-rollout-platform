@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rollout
+          POSTGRES_PASSWORD: rollout
+          POSTGRES_DB: rollout
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U rollout"
+          --health-interval 2s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      # Queue, recovery and web tests use tests/fake_harbor.py; the example-task tests
+      # grade each task offline. Neither needs Daytona or an API key.
+      - run: uv run pytest -q

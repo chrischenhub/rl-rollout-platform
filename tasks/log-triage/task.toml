@@ -1,0 +1,25 @@
+schema_version = "1.4"
+
+[task]
+name = "pyswe/log-triage"
+version = "1.0.0"
+description = "Write a log triage script, find the incident in an afternoon of API logs, and summarize it"
+keywords = ["python", "data-analysis", "incident-response", "llm-judge"]
+
+[metadata]
+difficulty = "medium"
+
+[environment]
+cpus = 1
+memory_mb = 2048
+storage_mb = 4096
+build_timeout_sec = 600.0
+network_mode = "public"
+
+[agent]
+timeout_sec = 1200
+
+[verifier]
+timeout_sec = 300
+network_mode = "public"
+env = { ANTHROPIC_API_KEY = "${ANTHROPIC_API_KEY:-}", JUDGE_MODEL = "${JUDGE_MODEL:-claude-sonnet-5-5}" }

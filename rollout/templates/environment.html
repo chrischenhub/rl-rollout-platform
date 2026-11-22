@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ env.name }} · Rollouts{% endblock %}
+{% block content %}
+<h1>{{ env.name }}</h1>
+<p class="sub">{{ tasks | length }} tasks. Choose an agent, select tasks, and start a job, or run Task QA to check
+  the tasks themselves.</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<form method="post" action="/jobs" id="new-job">
+<input type="hidden" name="environment_id" value="{{ env.id }}">
+<input type="hidden" name="form_token" value="{{ form_token }}">
+<div class="panel row job-bar">
+  <div class="field">
+    <label for="kind">Job type</label>
+    <select name="kind" id="kind">
+      <option value="eval">Evaluate the agent</option>
+      <option value="qa">Task QA: check the tasks</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="agent_model">Agent</label>
+    <select name="agent_model" id="agent_model">
+      {% for m in models %}<option value="claude-code:{{ m }}">Claude Code · {{ m }}</option>{% endfor %}
+      <option value="oracle">Oracle (reference solution)</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="attempts" id="attempts-label">Attempts per task</label>
+    <input type="number" name="attempts" id="attempts" min="1" max="10" value="1" required>
+  </div>
+  <div class="field">
+    <label><input type="checkbox" name="judge" checked> LLM judge (grades the rubric's judge criteria)</label>
+  </div>
+  <div class="go">
+    <span class="muted" id="picked" aria-live="polite"></span>
+    <button class="primary" type="submit" id="start">Start job</button>
+  </div>
+  <p class="muted qa-hint" id="qa-hint" hidden>Task QA runs each selected task {{ qa_min_runs }}–10 times with the
+    model and once with the oracle, then reports per task: pass rate, whether the oracle passed, agent time and
+    timeouts, and flags tasks that look broken or give no training signal.</p>
+</div>
+
+<div class="table-wrap">
+<table>
+  <tr>
+    <th><input type="checkbox" id="select-all" aria-label="Select all tasks"></th>
+    <th>Task ID</th><th>Description</th><th>Difficulty</th><th>Resources</th><th class="num">Agent timeout</th><th>Version</th>
+  </tr>
+  {% for t in tasks %}
+  {% set envcfg = t.config.get("environment", {}) %}
+  <tr>
+    <td><input type="checkbox" name="task_ids" value="{{ t.id }}" id="t-{{ loop.index }}"></td>
+    <td><label for="t-{{ loop.index }}"><code class="id">{{ t.id }}</code></label></td>
+    <td>
+      {{ t.description }}
+      <details><summary class="muted">Instruction</summary><pre>{{ t.instruction }}</pre></details>
+    </td>
+    <td>{{ t.config.get("metadata", {}).get("difficulty", "—") }}</td>
+    <td>
+      {% if t.overrides %}
+        <strong>{{ t.overrides.get("cpus", envcfg.get("cpus")) | int }} CPU / {{ (t.overrides.get("memory_mb", envcfg.get("memory_mb")) / 1024) | int }} GB</strong>
+        <span class="muted">(override; task.toml says {{ envcfg.get("cpus") }} / {{ (envcfg.get("memory_mb", 0) / 1024) | int }} GB)</span>
+      {% else %}
+        {{ envcfg.get("cpus", "—") }} CPU / {{ (envcfg.get("memory_mb", 0) / 1024) | int }} GB
+      {% endif %}
+    </td>
+    <td class="num">{{ t.config.get("agent", {}).get("timeout_sec") | duration }}</td>
+    <td><code title="{{ t.digest }}">{{ t.version }} · {{ t.digest[:8] }}</code></td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+</form>
+<script>
+  // Keep the select-all box and the Start button in step with the selection, so the button
+  // says how many runs it will queue and can't be pressed with nothing selected.
+  // Task QA always pairs a model with the oracle, so the oracle option is off and the
+  // attempts field becomes K, the model runs per task.
+  (function () {
+    const form = document.getElementById("new-job");
+    const boxes = [...form.querySelectorAll("input[name=task_ids]")];
+    const all = document.getElementById("select-all");
+    const start = document.getElementById("start");
+    const picked = document.getElementById("picked");
+    const kind = form.elements.kind, attempts = form.elements.attempts, agent = form.elements.agent_model;
+    const oracle = agent.querySelector("option[value=oracle]");
+    const QA_MIN = {{ qa_min_runs }}, QA_DEFAULT = {{ qa_default_runs }};
+    let wasQa = false;
+    function setKind() {
+      const qa = kind.value === "qa";
+      if (qa === wasQa) return;
+      wasQa = qa;
+      oracle.disabled = qa;
+      if (qa && agent.value === "oracle") agent.selectedIndex = 0;
+      attempts.min = qa ? QA_MIN : 1;
+      attempts.value = qa ? Math.max(QA_DEFAULT, parseInt(attempts.value, 10) || 0) : 1;
+      document.getElementById("attempts-label").textContent = qa ? "Model runs per task (K)" : "Attempts per task";
+      document.getElementById("qa-hint").hidden = !qa;
+    }
+    function update() {
+      setKind();
+      const qa = kind.value === "qa";
+      const n = boxes.filter((b) => b.checked).length;
+      const k = parseInt(attempts.value, 10) || 0;
+      const runs = n * (qa ? k + 1 : k);
+      const s = (x, word) => `${x} ${word}${x === 1 ? "" : "s"}`;
+      all.checked = n > 0 && n === boxes.length;
+      all.indeterminate = n > 0 && n < boxes.length;
+      start.disabled = n === 0;
+      const label = qa ? "Start Task QA" : "Start job";
+      start.textContent = n ? `${label} (${s(runs, "run")})` : label;
+      picked.textContent = !n ? "Select tasks below"
+        : qa ? `${n} of ${s(boxes.length, "task")} × (${k} model + 1 oracle)`
+        : `${n} of ${s(boxes.length, "task")} × ${s(k, "attempt")}`;
+    }
+    all.addEventListener("change", () => { boxes.forEach((b) => (b.checked = all.checked)); update(); });
+    form.addEventListener("change", update);
+    form.addEventListener("input", update);
+    update();
+  })();
+</script>
+{% endblock %}

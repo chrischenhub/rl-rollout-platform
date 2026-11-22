@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Environments</h1>
+<p class="sub">Pick an environment to see its tasks and start a job.</p>
+<div class="table-wrap">
+<table>
+  <tr><th>Environment</th><th class="num">Tasks</th><th>Registered</th></tr>
+  {% for e in environments %}
+  <tr>
+    <td><a href="/environments/{{ e.id }}">{{ e.name }}</a></td>
+    <td class="num">{{ e.task_count }}</td>
+    <td class="muted">{{ e.created_at | when }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="3" class="muted">No environments yet. Run <code>rollout import-tasks</code>.</td></tr>
+  {% endfor %}
+</table>
+</div>
+
+<h2>Recent jobs</h2>
+{% include "_jobs_table.html" %}
+{% endblock %}

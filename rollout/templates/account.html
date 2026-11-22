@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}API tokens · Rollouts{% endblock %}
+{% block content %}
+<h1>API tokens</h1>
+<p class="sub">Personal tokens for the JSON API. They act as you, and stop working if your domain loses access.</p>
+
+{% if new_token %}
+<div class="notice">
+  <p style="margin-top: 0;"><strong>New token.</strong> Copy it now; it won't be shown again.</p>
+  <pre>{{ new_token }}</pre>
+  <p>Start a job:</p>
+  <pre>curl -X POST {{ base_url }}/api/jobs \
+  -H "Authorization: Bearer {{ new_token }}" \
+  -H "Content-Type: application/json" \
+  -d '{"task_ids": ["pyswe/ledger-bugfix"], "model": "claude-sonnet-5", "attempts": 2}'</pre>
+</div>
+{% endif %}
+
+<form method="post" action="/account/tokens" class="panel row">
+  <div class="field">
+    <label for="label">Label</label>
+    <input type="text" name="label" id="label" placeholder="e.g. laptop" maxlength="100">
+  </div>
+  <button class="primary" type="submit">Create token</button>
+</form>
+
+<h2>Your tokens</h2>
+<div class="table-wrap">
+<table>
+  <tr><th>Label</th><th>Created</th><th>Last used</th><th></th></tr>
+  {% for t in tokens %}
+  <tr>
+    <td>{{ t.label or "—" }}</td>
+    <td class="muted">{{ t.created_at | when }}</td>
+    <td class="muted">{{ t.last_used_at | when }}</td>
+    <td><form class="inline" method="post" action="/account/tokens/{{ t.id }}/revoke"
+              data-confirm="Revoke {{ '“' ~ t.label ~ '”' if t.label else 'this token' }}?"
+              data-detail="Anything using it stops working right away. This can't be undone." data-go="Revoke">
+      <button class="danger">Revoke</button></form></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" class="muted">No tokens yet. Create one above to use the JSON API.</td></tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

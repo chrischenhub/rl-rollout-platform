@@ -1,0 +1,30 @@
+{
+  "pytest": ["test_hidden.py"],
+  "deliverables": [],
+  "criteria": [
+    {"id": "burst_capacity", "kind": "programmatic", "weight": 1,
+     "description": "starts full and drains to empty", "tests": ["test_starts_full_and_drains"]},
+    {"id": "refill_rate", "kind": "programmatic", "weight": 2,
+     "description": "continuous refill at rate, capped at capacity",
+     "tests": ["test_refills_continuously_at_rate", "test_refill_never_exceeds_capacity"]},
+    {"id": "atomic_acquire", "kind": "programmatic", "weight": 1,
+     "description": "a failed acquire takes nothing; fractional rates work",
+     "tests": ["test_failed_acquire_takes_nothing", "test_fractional_rate"]},
+    {"id": "wait_time", "kind": "programmatic", "weight": 1,
+     "description": "wait_time is exact and doesn't consume", "tests": ["test_wait_time"]},
+    {"id": "validation", "kind": "programmatic", "weight": 1,
+     "description": "invalid rates, capacities, token counts and max_keys raise ValueError",
+     "tests": ["test_rejects_bad_construction", "test_rejects_bad_token_counts", "test_keyed_rejects_bad_max_keys"]},
+    {"id": "clock_backwards", "kind": "programmatic", "weight": 1,
+     "description": "a clock going backwards neither adds nor removes tokens",
+     "tests": ["test_clock_going_backwards_adds_nothing"]},
+    {"id": "thread_safety", "kind": "programmatic", "weight": 3,
+     "description": "no over-admission and no errors under concurrent use",
+     "tests": ["test_threads_never_over_admit", "test_last_token_goes_to_exactly_one_thread", "test_keyed_limiter_under_threads"]},
+    {"id": "keyed_isolation", "kind": "programmatic", "weight": 1,
+     "description": "each key has its own bucket", "tests": ["test_keys_have_independent_buckets"]},
+    {"id": "keyed_eviction", "kind": "programmatic", "weight": 2,
+     "description": "least recently used keys are evicted beyond max_keys",
+     "tests": ["test_least_recently_used_key_is_evicted", "test_len_counts_tracked_keys"]}
+  ]
+}

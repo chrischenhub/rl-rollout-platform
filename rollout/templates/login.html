@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Sign in · Rollouts{% endblock %}
+{% block content %}
+<div class="panel" style="max-width: 420px; margin: 64px auto;">
+  <h1>Sign in</h1>
+  <p class="sub">Rollout platform for Harbor tasks on Daytona.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if google is not defined or google %}
+  <a class="button" href="/auth/google?next={{ (next or '/') | urlencode }}">Sign in with Google</a>
+  <p class="muted" style="margin-top: 16px;">Use a Google account this deployment allows.</p>
+  {% else %}
+  <p class="error">Google sign-in is not configured on this server.</p>
+  {% endif %}
+</div>
+{% endblock %}

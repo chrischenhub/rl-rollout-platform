@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run.id | short }} · Rollouts{% endblock %}
+{% block content %}
+<div id="live" {% if live %}data-poll="1"{% endif %}>
+<p class="muted"><a href="/jobs/{{ run.job_id }}">← Job {{ run.job_id | short }}</a></p>
+<div class="row page-head">
+  <div>
+    <h1><code>{{ run.task_id }}</code> · attempt {{ run.attempt }}{% if run.retry_number %} · retry {{ run.retry_number }}{% endif %}
+      <span class="badge s-{{ run.outcome }}">{% if live %}<span class="live-dot"></span>{% endif %}{{ OUTCOME_LABELS[run.outcome] }}</span></h1>
+    <p class="sub">Run <code>{{ run.id }}</code></p>
+  </div>
+  {% if not live and not run.retried_by %}
+  <form method="post" action="/runs/{{ run.id }}/retry" data-confirm="Run this task attempt again?"
+        data-detail="A new try is queued and linked to this one. It starts once this run's sandbox is deleted{{ ', and spends model credits' if run.model else '' }}."
+        data-keep="Don't retry" data-go="Retry">
+    <button>Retry</button>
+  </form>
+  {% endif %}
+</div>
+{% if retry_error %}<p class="error">Not retried: {{ retry_error }}</p>{% endif %}
+
+<div class="panel">
+<dl class="kv">
+  <dt>Agent</dt><dd>{{ run.agent }}{% if run.model %} · {{ run.model }}{% endif %}</dd>
+  <dt>Status</dt><dd><code>{{ run.status }}</code>{% if run.error_kind %} · <code>{{ run.error_kind }}</code>{% endif %}</dd>
+  <dt>Reward</dt><dd>{{ run.reward | reward }}</dd>
+  {% if run.error_kind or run.error_message %}
+  <dt>Why</dt><dd>{% if run.error_kind %}<code>{{ run.error_kind }}</code> {% endif %}{{ run.error_message or "" }}</dd>
+  {% endif %}
+  <dt>Duration</dt><dd>{{ run.duration_sec | duration if run.started_at else "not started" }}</dd>
+  <dt>Started</dt><dd>{{ run.started_at | when }}</dd>
+  <dt>Finished</dt><dd>{{ run.finished_at | when }}</dd>
+  {% if run.cost_usd is not none %}<dt>Agent cost</dt><dd>${{ "%.2f" % run.cost_usd }}</dd>{% endif %}
+  <dt>Task version</dt><dd><code>{{ run.task_digest[:12] }}</code></dd>
+  <dt>Worker</dt><dd class="muted">{{ run.worker_id or "—" }}</dd>
+  {% if run.waiting_for_cleanup %}<dt>Sandbox</dt><dd>waiting for the previous try's sandbox to be deleted</dd>
+  {% elif run.started_at and run.status not in ("queued", "running") %}<dt>Sandbox</dt><dd>{{ ("deleted " ~ (run.sandbox_cleared_at | when)) if run.sandbox_cleared_at else "deletion not confirmed yet" }}</dd>{% endif %}
+  {% if run.retry_of %}<dt>Retry of</dt><dd><a href="/runs/{{ run.retry_of }}">{{ run.retry_of | short }}</a>
+    <span class="muted">· {{ "requested by " ~ run.requested_by if run.retry_kind == "manual" else "automatic, after an infrastructure error" }}</span></dd>{% endif %}
+  {% if run.retried_by %}<dt>Retried as</dt><dd><a href="/runs/{{ run.retried_by }}">{{ run.retried_by | short }}</a></dd>{% endif %}
+</dl>
+</div>
+
+{% if run.log_tail and run.status != "completed" %}
+{% set source = run.log_source or "harbor.log" %}
+<h2>Last lines of <code>{{ source }}</code></h2>
+{% if files and source in files %}<p class="muted"><a href="/api/runs/{{ run.id }}/files/{{ source }}">Whole file</a></p>{% endif %}
+<pre class="tail">{{ run.log_tail }}</pre>
+{% endif %}
+
+{% if report %}
+<h2>Grader report</h2>
+{% if report.missing_deliverables %}<p class="error">Missing deliverables: {{ report.missing_deliverables | join(", ") }}</p>{% endif %}
+{% if report.error %}<p class="error">{{ report.error }}</p>{% endif %}
+{% if report.get("results") %}
+<div class="table-wrap">
+<table>
+  <tr><th>Criterion</th><th>Kind</th><th class="num">Weight</th><th>Result</th><th>Note</th></tr>
+  {% for c in report.get("results", []) %}
+  <tr>
+    <td><code>{{ c.id }}</code>{% if c.text %}<div class="muted">{{ c.text }}</div>{% endif %}</td>
+    <td>{{ c.kind }}</td>
+    <td class="num">{{ c.weight }}</td>
+    <td>{% if c.passed is none %}<span class="badge s-queued">skipped</span>{% elif c.passed %}<span class="badge s-completed">pass</span>{% else %}<span class="badge s-error">fail</span>{% endif %}</td>
+    <td class="muted">{{ c.note or "" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% endif %}
+{% endif %}
+
+<h2 id="transcript">Transcript</h2>
+{% if steps %}
+  {% if final_metrics %}<p class="muted">{{ final_metrics.total_steps }} steps
+    · {{ final_metrics.total_prompt_tokens }} prompt / {{ final_metrics.total_completion_tokens }} completion tokens
+    {% if final_metrics.total_cost_usd is not none %}· ${{ "%.2f" % final_metrics.total_cost_usd }}{% endif %}
+    · <a href="/api/runs/{{ run.id }}/transcript">raw trajectory.json</a></p>{% endif %}
+  {% for s in steps %}
+  <div class="step {{ s.source }}">
+    <div class="meta">#{{ s.id }} · {{ s.source }}{% if s.time %} · {{ s.time }}{% endif %}</div>
+    {% if s.message %}<pre>{{ s.message }}{% if s.message_cut %}
+… {{ s.message_cut }} more characters{% endif %}</pre>{% endif %}
+    {% for c in s.calls %}
+      <div class="meta">tool call: <code>{{ c.name }}</code></div>
+      <pre>{{ c.body }}{% if c.cut %}
+… {{ c.cut }} more characters{% endif %}</pre>
+    {% endfor %}
+    {% for r in s.results %}
+      <details><summary class="meta">result</summary><pre>{{ r.body }}{% if r.cut %}
+… {{ r.cut }} more characters (see raw transcript){% endif %}</pre></details>
+    {% endfor %}
+  </div>
+  {% endfor %}
+{% elif oracle_log is defined %}
+  <p class="muted">Oracle runs execute the reference solution; this is its output.
+    {% if oracle_cut %}Showing the last 20,000 characters.{% endif %}
+    <a href="/api/runs/{{ run.id }}/transcript">raw</a></p>
+  <pre>{{ oracle_log }}</pre>
+{% elif live %}
+  <p class="muted">The transcript syncs when the run finishes.</p>
+{% else %}
+  <p class="muted">No transcript was produced. See the Harbor log below.</p>
+{% endif %}
+
+<h2>Harbor command</h2>
+{% if run.harbor_command %}
+<p class="muted">Exactly what the worker launched. Credentials reach Harbor through its environment, not here.
+  {% if files and "trial/config.json" in files %}<a href="/api/runs/{{ run.id }}/files/trial/config.json">Harbor's resolved trial config</a>{% endif %}</p>
+<pre>{{ run.harbor_command | shell }}</pre>
+{% elif run.started_at %}
+<p class="muted">Not recorded: this run predates command recording.
+  {% if files and "trial/config.json" in files %}<a href="/api/runs/{{ run.id }}/files/trial/config.json">Harbor's resolved trial config</a> has what it ran with.{% endif %}</p>
+{% else %}
+<p class="muted">Recorded when the run starts.</p>
+{% endif %}
+
+{% if files %}
+<h2>Artifacts</h2>
+<div class="panel">
+  {% for f in files %}<div><a href="/api/runs/{{ run.id }}/files/{{ f }}"><code>{{ f }}</code></a></div>{% endfor %}
+</div>
+{% endif %}
+
+<h2>Events</h2>
+<div class="table-wrap">
+<table>
+  <tr><th>Time</th><th>Event</th><th>Detail</th></tr>
+  {% for e in events %}
+  <tr><td class="muted">{{ e.at | when }}</td><td>{{ e.kind }}</td><td><code>{{ e.detail | tojson }}</code></td></tr>
+  {% endfor %}
+</table>
+</div>
+</div>
+{% endblock %}

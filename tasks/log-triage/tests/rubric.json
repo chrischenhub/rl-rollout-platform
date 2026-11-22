@@ -1,0 +1,27 @@
+{
+  "pytest": ["test_hidden.py"],
+  "deliverables": ["triage.py", "out/report.json", "out/summary.md"],
+  "criteria": [
+    {"id": "counts", "kind": "programmatic", "weight": 2,
+     "description": "valid, malformed and per-class request counts", "tests": ["test_counts"]},
+    {"id": "p95_latency", "kind": "programmatic", "weight": 2,
+     "description": "nearest-rank p95 per path, query strings stripped", "tests": ["test_p95_latency"]},
+    {"id": "top_5xx", "kind": "programmatic", "weight": 1,
+     "description": "top 5xx paths with tie-breaking", "tests": ["test_top_5xx_paths"]},
+    {"id": "incident_window", "kind": "programmatic", "weight": 2,
+     "description": "incident start and end per the bad-minute rule", "tests": ["test_incident_window"]},
+    {"id": "reproducible", "kind": "programmatic", "weight": 1,
+     "description": "re-running triage.py on /app/logs reproduces report.json", "tests": ["test_report_comes_from_the_script"]},
+    {"id": "generalizes", "kind": "programmatic", "weight": 4,
+     "description": "the script is right on two unseen log sets, one with no incident",
+     "tests": ["test_holdout_with_incident", "test_holdout_without_incident"]},
+    {"id": "summary_finds_cause", "kind": "judge", "weight": 1,
+     "description": "summary names the failing endpoint and the right window",
+     "files": ["out/summary.md"], "context": ["incident_notes.md", "expected_main.json"],
+     "question": "Does the summary identify /api/checkout returning 503 errors as what broke, and give an incident time window whose start and end are each within one minute of the reference window (14:21 to 14:34 UTC; '14:33' as the last bad minute is also correct)?"},
+    {"id": "summary_grounded", "kind": "judge", "weight": 1,
+     "description": "summary is accurate, labels inferences, has a concrete next step, under 200 words",
+     "files": ["out/summary.md"], "context": ["incident_notes.md", "expected_main.json"],
+     "question": "Is every number and factual claim in the summary consistent with the reference (rounding is fine), with any cause the logs can't show clearly labeled as a hypothesis rather than stated as fact; does it give at least one concrete next step that follows from the data; and is it under 200 words? Fail it if any one of these doesn't hold."}
+  ]
+}

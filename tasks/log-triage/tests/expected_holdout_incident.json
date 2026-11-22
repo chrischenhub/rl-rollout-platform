@@ -1,0 +1,34 @@
+{
+  "total_requests": 1303,
+  "malformed_lines": 9,
+  "status_classes": {
+    "2xx": 1096,
+    "3xx": 27,
+    "4xx": 86,
+    "5xx": 94
+  },
+  "p95_latency_ms": {
+    "/metrics": 14,
+    "/v2/items": 180,
+    "/v2/login": 609,
+    "/v2/search": 9787
+  },
+  "top_5xx_paths": [
+    {
+      "path": "/v2/search",
+      "count": 84
+    },
+    {
+      "path": "/v2/items",
+      "count": 7
+    },
+    {
+      "path": "/v2/login",
+      "count": 2
+    }
+  ],
+  "incident": {
+    "start": "2026-12-08T09:12:00Z",
+    "end": "2026-12-08T09:19:00Z"
+  }
+}
